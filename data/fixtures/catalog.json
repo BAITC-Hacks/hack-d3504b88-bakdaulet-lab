@@ -1,0 +1,58 @@
+{
+  "provenance": "Synthetic demonstration data; not current ekt.kz catalog facts",
+  "checkedAt": "2026-09-23",
+  "products": [
+    {
+      "id": 1001,
+      "name": "Автоматический выключатель DemoLine 1P 16 А C",
+      "article": "DEMO-AV16",
+      "description": "Учебная карточка для демонстрации поиска и корзины.",
+      "price": 2500,
+      "quantity": 10,
+      "stores": [{ "id": 1, "name": "Алматы (демо)", "quantity": 10 }],
+      "image": null,
+      "url": "",
+      "offers": [],
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+    },
+    {
+      "id": 1002,
+      "name": "Автоматический выключатель DemoLine 1P 16 А C, нет в наличии",
+      "article": "DEMO-AV16-OLD",
+      "description": "Учебная карточка товара без остатка.",
+      "price": 2400,
+      "quantity": 0,
+      "stores": [{ "id": 1, "name": "Алматы (демо)", "quantity": 0 }],
+      "image": null,
+      "url": "",
+      "offers": [],
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+    },
+    {
+      "id": 1003,
+      "name": "Автоматический выключатель DemoLine 1P 25 А C",
+      "article": "DEMO-AV25",
+      "description": "Учебная карточка с иным номинальным током.",
+      "price": 2700,
+      "quantity": 8,
+      "stores": [{ "id": 1, "name": "Алматы (демо)", "quantity": 8 }],
+      "image": null,
+      "url": "",
+      "offers": [],
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "25 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+    },
+    {
+      "id": 1004,
+      "name": "Светильник DemoLight 30 Вт",
+      "article": "DEMO-LIGHT30",
+      "description": "Учебная карточка для демонстрации сертификата.",
+      "price": 3800,
+      "quantity": null,
+      "stores": [],
+      "image": null,
+      "url": "",
+      "offers": [],
+      "properties": { "SERTIFIKAT": "https://example.org/demo-certificate.pdf", "MOSHCHNOST": "30 Вт" }
+    }
+  ]
+}

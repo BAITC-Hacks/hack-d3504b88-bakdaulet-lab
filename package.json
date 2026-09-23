@@ -1,0 +1,35 @@
+{
+  "name": "ekt-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "catalog:sync": "tsx scripts/sync-catalog.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "mammoth": "^1.11.0",
+    "next": "^16.3.6",
+    "openai": "^6.49.0",
+    "pdf-parse": "1.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "playwright-core": "^1.63.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  }
+}
