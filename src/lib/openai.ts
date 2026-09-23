@@ -7,6 +7,18 @@ import { ChatReply, Product } from "./types";
 import { cartAdapter } from "./cart";
 import { availability } from "./inventory";
 import { db } from "./db";
+import { z } from "zod";
+
+const positiveInteger = z.number().int().positive();
+const toolSchemas: Record<string, z.ZodType> = {
+  search_products: z.strictObject({ query: z.string().trim().min(1).max(120) }),
+  get_product_details: z.strictObject({ id: positiveInteger }),
+  find_analogs: z.strictObject({ id: positiveInteger }),
+  get_purchase_policy: z.strictObject({ topic: z.string().trim().min(1).max(1000), city: z.string().trim().min(1).max(80).nullable() }),
+  get_cart: z.strictObject({}),
+  prepare_cart_proposal: z.strictObject({ productId: positiveInteger, quantity: positiveInteger }),
+  read_attachment_rows: z.strictObject({ id: z.string().uuid() }),
+};
 
 export async function askAI(sessionId: string, input: string): Promise<ChatReply | null> {
   if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) return null;
@@ -35,10 +47,18 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
       });
       messages.push(...response.output as OpenAI.Responses.ResponseInputItem[]);
       const calls = response.output.filter(item => item.type === "function_call");
-      if (!calls.length) return { text: facts.length ? facts.join("\n") : response.output_text || "Уточните артикул или характеристики товара.", products, analogs, proposal, city: context.city };
+      if (!calls.length) return { text: facts.length ? facts.join("\n") : "Нет подтверждённых данных для ответа. Уточните артикул или характеристики товара.", products, analogs, proposal, city: context.city };
       for (const call of calls) {
         let output: unknown;
-        const args = JSON.parse(call.arguments) as Record<string, unknown>;
+        const schema = Object.hasOwn(toolSchemas, call.name) ? toolSchemas[call.name] : undefined;
+        let raw: unknown;
+        try { raw = JSON.parse(call.arguments); } catch { raw = null; }
+        const parsed = schema?.safeParse(raw);
+        if (!parsed?.success) {
+          messages.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify({ error: "Некорректные аргументы" }) });
+          continue;
+        }
+        const args = parsed.data as Record<string, unknown>;
         if (call.name === "search_products" && typeof args.query === "string") {
           output = await searchProducts(args.query, 5);
           const found = output as Awaited<ReturnType<typeof searchProducts>>;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { freshProduct } from "./catalog";
 import { availability } from "./inventory";
-import { CartLine, ProposalLine } from "./types";
+import { CartLine, Product, ProposalLine } from "./types";
 
 type ProposalRow = { id: string; session_id: string; version: number; cart_version: number; status: string; lines: string; expires_at: string; result: string | null };
 export class CartError extends Error { constructor(message: string, public status = 400) { super(message); } }
@@ -18,6 +18,41 @@ export interface CartAdapter {
 const keyOf = (productId: number, storeId: number | null, city: string | null) => `${productId}:${storeId ?? city?.toLocaleLowerCase("ru") ?? "all"}`;
 const money = (price: number) => Math.round(price * 100);
 
+// No warehouse allocation is persisted for city/aggregate lines. Do not count
+// their stock again through a different, overlapping selection.
+function checkStock(product: Product, lines: ProposalLine[]) {
+  const scopes = new Map<string, { quantity: number; available: number; stores: Set<number> }>();
+  let total = 0;
+  for (const line of lines.filter(item => item.productId === product.id)) {
+    const stock = availability(product, line.city || undefined, line.storeId);
+    if (stock.quantity === null) throw new CartError("Наличие этого товара для добавления не подтверждено.", 409);
+    const key = keyOf(line.productId, line.storeId, line.city);
+    const scope = scopes.get(key) || { quantity: 0, available: stock.quantity, stores: new Set(product.stores.filter(store =>
+      availability(product, undefined, store.id).quantity !== null &&
+      (line.storeId !== null ? store.id === line.storeId : !line.city || store.name.toLocaleLowerCase("ru").includes(line.city.toLocaleLowerCase("ru")))
+    ).map(store => store.id)) };
+    scope.quantity += line.quantity;
+    total += line.quantity;
+    if (!Number.isSafeInteger(scope.quantity) || scope.quantity > scope.available) throw new CartError(`Доступно ${scope.available} шт. с учётом уже выбранного количества.`, 409);
+    scopes.set(key, scope);
+  }
+  const selections = [...scopes.values()];
+  for (let i = 0; i < selections.length; i++) {
+    for (let j = i + 1; j < selections.length; j++) {
+      if ([...selections[i].stores].some(store => selections[j].stores.has(store))) {
+        throw new CartError("Остатки выбранных строк пересекаются. Выберите один город или отдельные склады для этого товара.", 409);
+      }
+    }
+  }
+  const overall = availability(product).quantity;
+  const limit = overall === null ? product.quantity : overall;
+  if (!Number.isSafeInteger(total) || (limit !== null && total > limit)) throw new CartError(`Общее доступное количество: ${limit ?? 0} шт. Уточните состав корзины.`, 409);
+}
+
+function sameProduct(product: Product, line: ProposalLine) {
+  return product.id === line.productId && !product.offers.length && product.name === line.name && product.article === line.article && product.price === line.price;
+}
+
 export class PrototypeCartAdapter implements CartAdapter {
   get(sessionId: string) {
     const cart = db().prepare("SELECT version FROM carts WHERE session_id=?").get(sessionId) as { version: number } | undefined;
@@ -29,19 +64,24 @@ export class PrototypeCartAdapter implements CartAdapter {
     if (!requests.length || requests.length > 30) throw new CartError("Выберите от 1 до 30 позиций.");
     const grouped = new Map<string, { productId: number; quantity: number; storeId: number | null }>();
     for (const request of requests) {
-      if (!Number.isSafeInteger(request.productId) || !Number.isSafeInteger(request.quantity) || request.quantity <= 0) throw new CartError("Количество должно быть положительным целым числом.");
+      if (!Number.isSafeInteger(request.productId) || request.productId <= 0 || !Number.isSafeInteger(request.quantity) || request.quantity <= 0) throw new CartError("ID товара и количество должны быть положительными целыми числами.");
       const storeId = request.storeId ?? null;
-      if (storeId !== null && !Number.isSafeInteger(storeId)) throw new CartError("Некорректный склад.");
+      if (storeId !== null && (!Number.isSafeInteger(storeId) || storeId <= 0)) throw new CartError("Некорректный склад.");
       const key = keyOf(request.productId, storeId, null);
       const existing = grouped.get(key);
-      grouped.set(key, { productId: request.productId, storeId, quantity: request.quantity + (existing?.quantity || 0) });
+      const quantity = request.quantity + (existing?.quantity || 0);
+      if (!Number.isSafeInteger(quantity)) throw new CartError("Слишком большое количество.");
+      grouped.set(key, { productId: request.productId, storeId, quantity });
     }
     const cart = this.get(sessionId);
     const session = db().prepare("SELECT city FROM sessions WHERE id=?").get(sessionId) as { city: string | null };
     const city = session?.city || null;
     const lines: ProposalLine[] = [];
+    const products = new Map<number, Product>();
     for (const request of grouped.values()) {
-      const product = await freshProduct(request.productId);
+      const product = products.get(request.productId) || await freshProduct(request.productId);
+      if (product.id !== request.productId) throw new CartError("Данные товара изменились. Повторите поиск.", 409);
+      products.set(product.id, product);
       if (product.offers.length) throw new CartError("У товара есть варианты. Выберите конкретный вариант перед добавлением.");
       const stock = availability(product, city || undefined, request.storeId);
       const already = cart.lines.find(line => line.key === keyOf(product.id, request.storeId, city))?.quantity || 0;
@@ -50,6 +90,7 @@ export class PrototypeCartAdapter implements CartAdapter {
       if (product.price === null || product.price <= 0) throw new CartError("Цена товара требует уточнения.");
       lines.push({ productId: product.id, name: product.name, article: product.article, quantity: request.quantity, unit: "шт", storeId: request.storeId, city, price: product.price, available: stock.quantity, checkedAt: product.fetchedAt });
     }
+    for (const product of products.values()) checkStock(product, [...cart.lines, ...lines]);
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     db().transaction(() => {
@@ -63,23 +104,28 @@ export class PrototypeCartAdapter implements CartAdapter {
   async confirm(sessionId: string, id: string, version: number) {
     const proposal = db().prepare("SELECT * FROM proposals WHERE id=? AND session_id=?").get(id, sessionId) as ProposalRow | undefined;
     if (!proposal) throw new CartError("Предложение не найдено в вашей сессии.", 404);
-    if (proposal.status === "confirmed" && proposal.result) return { ...JSON.parse(proposal.result), repeated: true };
-    if (proposal.status !== "pending" || proposal.version !== version || Date.parse(proposal.expires_at) < Date.now()) throw new CartError("Предложение больше не действует. Подготовьте новое.", 409);
+    if (proposal.version !== version) throw new CartError("Предложение больше не действует. Подготовьте новое.", 409);
+    if (proposal.status === "confirmed" && proposal.result) return { cart: this.get(sessionId), cartUrl: "/cart", repeated: true };
+    if (proposal.status !== "pending" || !(Date.parse(proposal.expires_at) > Date.now())) throw new CartError("Предложение больше не действует. Подготовьте новое.", 409);
     const lines = JSON.parse(proposal.lines) as ProposalLine[];
     const cartBefore = this.get(sessionId);
     if (cartBefore.version !== proposal.cart_version) throw new CartError("Корзина изменилась. Подготовьте предложение заново.", 409);
+    const products = new Map<number, Product>();
     for (const line of lines) {
-      const product = await freshProduct(line.productId);
+      const product = products.get(line.productId) || await freshProduct(line.productId);
+      products.set(product.id, product);
       const stock = availability(product, line.city || undefined, line.storeId);
       const existing = cartBefore.lines.find(item => item.key === keyOf(line.productId, line.storeId, line.city))?.quantity || 0;
-      if (product.name !== line.name || product.article !== line.article || product.price !== line.price || stock.quantity === null || stock.quantity < existing + line.quantity) {
+      if (!sameProduct(product, line) || stock.quantity === null || stock.quantity < existing + line.quantity) {
         throw new CartError("Цена, товар или наличие изменились. Обновите предложение и подтвердите его снова.", 409);
       }
     }
+    for (const product of products.values()) checkStock(product, [...cartBefore.lines, ...lines]);
     return db().transaction(() => {
       const current = db().prepare("SELECT * FROM proposals WHERE id=? AND session_id=?").get(id, sessionId) as ProposalRow;
-      if (current.status === "confirmed" && current.result) return { ...JSON.parse(current.result), repeated: true };
-      if (current.status !== "pending") throw new CartError("Предложение больше не действует.", 409);
+      if (current.version !== version) throw new CartError("Предложение больше не действует.", 409);
+      if (current.status === "confirmed" && current.result) return { cart: this.get(sessionId), cartUrl: "/cart", repeated: true };
+      if (current.status !== "pending" || !(Date.parse(current.expires_at) > Date.now())) throw new CartError("Предложение больше не действует.", 409);
       const cart = this.get(sessionId);
       if (cart.version !== current.cart_version) throw new CartError("Корзина изменилась. Подготовьте предложение заново.", 409);
       db().prepare("INSERT OR IGNORE INTO carts (session_id,version) VALUES (?,0)").run(sessionId);
@@ -105,8 +151,9 @@ export class PrototypeCartAdapter implements CartAdapter {
     if (!line) throw new CartError("Позиция не найдена в вашей корзине.", 404);
     const product = await freshProduct(line.productId);
     const stock = availability(product, line.city || undefined, line.storeId);
-    if (product.price !== line.price || product.name !== line.name || stock.quantity === null) throw new CartError("Данные товара изменились. Подготовьте новое предложение через чат.", 409);
+    if (!sameProduct(product, line) || stock.quantity === null) throw new CartError("Данные товара изменились. Подготовьте новое предложение через чат.", 409);
     if (quantity > stock.quantity) throw new CartError(`Доступно не более ${stock.quantity} шт.`, 409);
+    checkStock(product, cart.lines.map(item => item.key === key ? { ...item, quantity } : item));
     return db().transaction(() => {
       if (this.get(sessionId).version !== version) throw new CartError("Корзина изменилась. Обновите страницу.", 409);
       db().prepare("UPDATE cart_items SET payload=? WHERE session_id=? AND item_key=?").run(JSON.stringify({ ...line, quantity }), sessionId, key);
