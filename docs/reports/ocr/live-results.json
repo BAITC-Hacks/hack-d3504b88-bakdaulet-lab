@@ -1,0 +1,76 @@
+[
+  {
+    "name": "specification.jpg",
+    "at": "2026-09-23T11:56:25.648Z",
+    "elapsedMs": 7160,
+    "status": 200,
+    "rows": [
+      {
+        "source": "OCR: стр. 1, строка 1",
+        "text": "DEMO-AV16 2 шт",
+        "article": "DEMO-AV16",
+        "quantity": 2,
+        "unit": "шт",
+        "confidence": "low",
+        "productId": 1001,
+        "status": "Артикул найден. Проверьте количество; проверьте единицу"
+      },
+      {
+        "source": "OCR: стр. 1, строка 2",
+        "text": "DEMO-AV25 3 шт",
+        "article": "DEMO-AV25",
+        "quantity": 3,
+        "unit": "шт",
+        "confidence": "low",
+        "productId": 1003,
+        "status": "Артикул найден. Проверьте количество; проверьте единицу"
+      }
+    ]
+  },
+  {
+    "name": "scan.pdf",
+    "at": "2026-09-23T11:56:29.741Z",
+    "elapsedMs": 4090,
+    "status": 200,
+    "rows": [
+      {
+        "source": "OCR: стр. 1, строка 1",
+        "text": "DEMO-AV16 2 шт",
+        "article": "DEMO-AV16",
+        "quantity": 2,
+        "unit": "шт",
+        "confidence": "low",
+        "productId": 1001,
+        "status": "Артикул найден. Проверьте количество; проверьте единицу"
+      },
+      {
+        "source": "OCR: стр. 1, строка 2",
+        "text": "DEMO-AV25 3 шт",
+        "article": "DEMO-AV25",
+        "quantity": 3,
+        "unit": "шт",
+        "confidence": "low",
+        "productId": 1003,
+        "status": "Артикул найден. Проверьте количество; проверьте единицу"
+      }
+    ]
+  },
+  {
+    "name": "unclear.jpg",
+    "at": "2026-09-23T11:56:36.710Z",
+    "elapsedMs": 6967,
+    "status": 200,
+    "rows": [
+      {
+        "source": "OCR: стр. 1, строка 3",
+        "text": "Артикул (конец маркировки обрезан): DEMO-AV",
+        "article": null,
+        "quantity": null,
+        "unit": null,
+        "confidence": "low",
+        "productId": null,
+        "status": "Маркировка неразборчива: уточните артикул, количество и единицу. Укажите целое положительное количество; Уточните единицу: поддерживаются только штуки"
+      }
+    ]
+  }
+]

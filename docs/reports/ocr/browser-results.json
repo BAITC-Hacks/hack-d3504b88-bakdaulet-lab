@@ -1,0 +1,59 @@
+{
+  "at": "2026-09-23T12:04:07.923Z",
+  "httpChecks": [
+    {
+      "name": "empty.xlsx",
+      "status": 400,
+      "message": "Файл пустой."
+    },
+    {
+      "name": "fake.pdf",
+      "status": 400,
+      "message": "Содержимое файла не соответствует расширению."
+    },
+    {
+      "name": "wrong.jpg",
+      "status": 400,
+      "message": "Тип MIME файла не соответствует расширению."
+    },
+    {
+      "name": "broken.pdf",
+      "status": 400,
+      "message": "PDF повреждён или не читается."
+    },
+    {
+      "name": "old.doc",
+      "status": 400,
+      "message": "Поддерживаются XLSX, XLS, DOCX, PDF и JPEG. Старый DOC пока не поддерживается; сохраните его как DOCX или PDF."
+    },
+    {
+      "name": "large.jpg",
+      "status": 413,
+      "message": "Файл превышает допустимый размер."
+    }
+  ],
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "correctedRows": 2,
+      "excludedRows": 1,
+      "cartBefore": 0,
+      "cartAfter": 0,
+      "overflow": 0
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "correctedRows": 2,
+      "excludedRows": 1,
+      "cartBefore": 0,
+      "cartAfter": 0,
+      "overflow": 0
+    }
+  ]
+}
