@@ -1,13 +1,16 @@
 services:
   app:
     build: .
+    init: true
+    stop_grace_period: 30s
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     env_file:
       - .env
     environment:
-      DATABASE_PATH: /app/data/app.sqlite
+      DATABASE_PATH: /app/storage/app.sqlite
+      PORT: "3000"
     volumes:
-      - ekt_data:/app/data
+      - ekt_data:/app/storage
 volumes:
   ekt_data:
