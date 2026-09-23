@@ -15,12 +15,16 @@ try {
   await desktop.screenshot({ path: "docs/screenshot-desktop.png", fullPage: true });
   await desktop.getByRole("button", { name: "Подготовить предложение" }).click();
   await desktop.getByText("ПРОВЕРЬТЕ ПЕРЕД ДОБАВЛЕНИЕМ").waitFor();
+  await desktop.reload();
+  await desktop.getByText("ПРОВЕРЬТЕ ПЕРЕД ДОБАВЛЕНИЕМ").waitFor();
   await desktop.getByRole("button", { name: "Подтвердить добавление" }).click();
   await desktop.getByRole("link", { name: "Открыть корзину ↗" }).click();
   await desktop.getByText("Корзина прототипа. Заказ в ekt.kz ещё не оформлен.").waitFor();
   await desktop.getByText("Автоматический выключатель DemoLine 1P 16 А C", { exact: true }).waitFor();
   await desktop.reload();
   await desktop.getByText("Автоматический выключатель DemoLine 1P 16 А C", { exact: true }).waitFor();
+  await desktop.goto(base);
+  await desktop.locator(".message.user").filter({ hasText: "DEMO-AV16" }).first().waitFor();
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   mobile.on("pageerror", error => errors.push(error.message));
   await mobile.goto(base);

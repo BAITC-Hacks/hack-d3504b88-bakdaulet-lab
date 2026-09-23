@@ -17,12 +17,16 @@ describe("catalog normalization", () => {
     const product = normalize({ id: 1, name: "Светильник", quantity: 8, stores: [{ id: 1, name: "Брак MEGALIGHT", quantity: 7 }, { id: 2, name: "Алматы", quantity: 1 }], properties: {} }, "live");
     expect(availability(product).quantity).toBe(1);
     expect(availability(product, "Астана").quantity).toBeNull();
+    const onlyDefect = normalize({ id: 2, name: "Светильник", quantity: 7, stores: [{ id: 1, name: "Брак MEGALIGHT", quantity: 7 }], properties: {} }, "live");
+    expect(availability(onlyDefect).quantity).toBeNull();
   });
 
   it("shows certificate only for a real URL tied to the detail", () => {
     const product = normalize({ id: 1, name: "Demo", properties: { SERTIFIKAT: "https://example.org/certificate.pdf" } }, "demo");
     expect(product.certificates).toHaveLength(1);
     expect(product.certificates[0].source).toBe("properties.SERTIFIKAT");
+    const described = normalize({ id: 2, name: "Demo", description: '<a href="https://ekt.kz/files/cert.pdf">Сертификат соответствия</a>', properties: {} }, "live");
+    expect(described.certificates[0].source).toBe("description");
   });
 
   it("does not expose demo index entries after switching to live mode", async () => {
@@ -31,8 +35,11 @@ describe("catalog normalization", () => {
     const catalog = await import("../src/lib/catalog");
     await catalog.bootstrapCatalog();
     expect(catalog.catalogStatus().count).toBe(4);
+    const database = (await import("../src/lib/db")).db();
+    database.prepare("INSERT INTO sessions (id,created_at) VALUES (?,?)").run(randomUUID(), new Date().toISOString());
     process.env.DATA_MODE = "live";
     expect(catalog.catalogStatus().count).toBe(0);
+    expect((database.prepare("SELECT COUNT(*) count FROM sessions").get() as { count: number }).count).toBe(0);
     process.env.DATA_MODE = "demo";
   });
 });

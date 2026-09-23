@@ -12,6 +12,7 @@ beforeAll(async () => {
   chat = (await import("../src/lib/chat")).chat;
   cart = (await import("../src/lib/cart")).cartAdapter;
   database = (await import("../src/lib/db")).db;
+  (await import("../src/lib/catalog")).catalogStatus();
 });
 function session() { const id = randomUUID(); database().prepare("INSERT INTO sessions (id,created_at) VALUES (?,?)").run(id, new Date().toISOString()); return id; }
 
@@ -31,5 +32,13 @@ describe("chat intent and consent", () => {
     await chat(id, "не добавляй");
     expect((await chat(id, "да, добавь")).cartUrl).toBeUndefined();
     expect(cart.get(id).lines).toHaveLength(0);
+  });
+  it("stores chat history only in its session", async () => {
+    const one = session(); const two = session();
+    const reply = await chat(one, "DEMO-AV16");
+    const { saveExchange, getHistory } = await import("../src/lib/session");
+    saveExchange(one, "DEMO-AV16", reply);
+    expect(getHistory(one)).toHaveLength(2);
+    expect(getHistory(two)).toHaveLength(0);
   });
 });

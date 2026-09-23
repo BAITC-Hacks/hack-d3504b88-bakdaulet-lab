@@ -21,5 +21,6 @@ export function availability(product: Product, city?: string, storeId?: number |
     const amount = product.quantity === null ? storeTotal : Math.min(product.quantity, storeTotal);
     return { quantity: amount, label: product.quantity !== null && product.quantity !== storeTotal ? "Данные общего и складского остатка различаются; показано меньшее значение" : "Доступные склады", storeId: null };
   }
-  return { quantity: product.quantity, label: product.quantity === null ? "Наличие неизвестно" : "Общий остаток; склад продажи не подтверждён", storeId: null };
+  if (product.quantity === 0) return { quantity: 0, label: "Общий остаток равен нулю", storeId: null };
+  return { quantity: null, label: product.quantity === null ? "Наличие неизвестно" : `Общий остаток ${product.quantity} шт., но доступный склад продажи не подтверждён`, storeId: null };
 }

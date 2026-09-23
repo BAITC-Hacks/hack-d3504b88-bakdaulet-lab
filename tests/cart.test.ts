@@ -11,6 +11,7 @@ beforeAll(async () => {
   process.env.DATABASE_PATH = join(tmpdir(), `ekt-test-${randomUUID()}.sqlite`);
   cart = await import("../src/lib/cart");
   database = await import("../src/lib/db");
+  (await import("../src/lib/catalog")).catalogStatus();
 });
 
 beforeEach(() => {

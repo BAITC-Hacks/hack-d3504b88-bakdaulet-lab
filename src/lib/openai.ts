@@ -41,11 +41,13 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
         const args = JSON.parse(call.arguments) as Record<string, unknown>;
         if (call.name === "search_products" && typeof args.query === "string") {
           output = await searchProducts(args.query, 5);
+          const found = output as Awaited<ReturnType<typeof searchProducts>>;
+          facts.push(found.length ? `В доступном индексе найдены кандидаты: ${found.map(item => `${item.name} (артикул ${item.article}, ID ${item.id})`).join("; ")}. Для актуальной цены и остатка откройте карточку.` : "В доступной выборке по этому запросу ничего не найдено.");
         } else if (call.name === "get_product_details" && Number.isSafeInteger(args.id)) {
           const product = await freshProduct(Number(args.id));
           products.push(product); setLastProduct(sessionId, product.id);
           const stock = availability(product, context.city || undefined);
-          facts.push(`${product.name}. Артикул: ${product.article}. Цена: ${product.price ?? "не подтверждена"} ₸. Наличие: ${stock.quantity ?? "неизвестно"} (${stock.label}). ${product.conflicts.length ? `Расхождение: ${product.conflicts.join("; ")}.` : ""} Источник: ${product.url || "демонстрационные данные"}.`);
+          facts.push(`${product.name}. Артикул: ${product.article}. Цена: ${product.price !== null && product.price > 0 ? `${product.price} ₸` : "требует уточнения"}. Наличие: ${stock.quantity === null ? "неизвестно" : `${stock.quantity} шт.`} (${stock.label}). ${product.conflicts.length ? `Расхождение: ${product.conflicts.join("; ")}.` : ""} Источник: ${product.url || "демонстрационные данные"}.`);
           output = product;
         } else if (call.name === "find_analogs" && Number.isSafeInteger(args.id)) {
           const source = await freshProduct(Number(args.id));
@@ -58,8 +60,9 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
           facts.push(`${policy.text} Источник: ${policy.source}.`);
           output = policy;
         } else if (call.name === "get_cart") {
-          output = cartAdapter.get(sessionId);
-          facts.push("Содержимое текущей корзины показано по данным сервера.");
+          const cart = cartAdapter.get(sessionId);
+          output = cart;
+          facts.push(cart.lines.length ? `В корзине прототипа: ${cart.lines.map(item => `${item.name} — ${item.quantity} шт.`).join("; ")}. Итого ${cart.total} ₸.` : "Корзина прототипа пока пуста.");
         } else if (call.name === "prepare_cart_proposal" && Number.isSafeInteger(args.productId) && Number.isSafeInteger(args.quantity)) {
           proposal = await cartAdapter.prepare(sessionId, [{ productId: Number(args.productId), quantity: Number(args.quantity) }]);
           output = proposal;

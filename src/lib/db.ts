@@ -13,6 +13,7 @@ export function db() {
   database.pragma("foreign_keys = ON");
   database.exec(`
     CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, last_product_id INTEGER, city TEXT);
+    CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, reply TEXT, created_at TEXT NOT NULL, FOREIGN KEY(session_id) REFERENCES sessions(id));
     CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, article TEXT, supplier_article TEXT, name TEXT NOT NULL, search_text TEXT NOT NULL, payload TEXT NOT NULL, fetched_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS catalog_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, version INTEGER NOT NULL, cart_version INTEGER NOT NULL, status TEXT NOT NULL, lines TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, result TEXT, FOREIGN KEY(session_id) REFERENCES sessions(id));

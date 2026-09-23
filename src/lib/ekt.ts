@@ -42,6 +42,10 @@ const safeUrl = (value: unknown) => {
   if (typeof value !== "string") return "";
   try { const url = new URL(value, "https://ekt.kz"); return url.protocol === "https:" && url.hostname === "ekt.kz" ? url.href : ""; } catch { return ""; }
 };
+const certificateUrl = (value: unknown) => {
+  if (typeof value !== "string") return "";
+  try { const url = new URL(value, "https://ekt.kz"); return url.protocol === "https:" ? url.href : ""; } catch { return ""; }
+};
 
 export function normalize(raw: Record<string, unknown>, source: "live" | "demo", fetchedAt = new Date().toISOString()): Product {
   const properties = raw.properties && typeof raw.properties === "object" && !Array.isArray(raw.properties) ? raw.properties as Record<string, unknown> : {};
@@ -55,10 +59,15 @@ export function normalize(raw: Record<string, unknown>, source: "live" | "demo",
   const titleCurrent = name.match(/(?:^|[^\d])(\d+)\s*[АA](?=$|[^\p{L}])/iu)?.[1];
   const propertyCurrentNumber = propertyCurrent.match(/(?:^|[^\d])(\d+)\s*[АA](?=$|[^\p{L}])/iu)?.[1];
   const conflicts = titleCurrent && propertyCurrentNumber && titleCurrent !== propertyCurrentNumber ? [`Номинальный ток: название ${titleCurrent} А, свойство ${propertyCurrent}`] : [];
-  const certificates = Object.entries(properties).filter(([key]) => /cert|sert|сертиф/i.test(key)).flatMap(([key, value]) => {
+  const certificates = Object.entries({ ...properties, ...(raw.certificate_url ? { certificate_url: raw.certificate_url } : {}) }).filter(([key]) => /cert|sert|сертиф/i.test(key)).flatMap(([key, value]) => {
     const values = Array.isArray(value) ? value : [value];
-    return values.filter((v): v is string => typeof v === "string" && /^https:\/\//.test(v)).map(v => ({ label: key, url: v, source: `properties.${key}` }));
+    return values.map(certificateUrl).filter(Boolean).map(url => ({ label: key, url, source: key === "certificate_url" ? key : `properties.${key}` }));
   });
+  for (const anchor of description.matchAll(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/giu)) {
+    if (!/cert|sert|сертиф/iu.test(anchor[2])) continue;
+    const url = certificateUrl(anchor[1]);
+    if (url && !certificates.some(item => item.url === url)) certificates.push({ label: anchor[2].trim(), url, source: "description" });
+  }
   return {
     id: Number(raw.id), name, article: str(raw.article), supplierArticle: str(properties.ARTIKULPOSTAVSHCHIKA) || null,
     description, price: num(raw.price), quantity: num(raw.quantity), stores,

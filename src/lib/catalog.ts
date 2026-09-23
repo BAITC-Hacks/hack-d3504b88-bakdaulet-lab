@@ -3,11 +3,17 @@ import { dataMode, getPage, getProduct } from "./ekt";
 import { Product, SearchItem } from "./types";
 
 const searchKey = (value: string) => value.toLocaleLowerCase("ru").normalize("NFKC").replace(/\s+/g, " ").trim();
-function ensureMode() {
+export function ensureMode() {
   const mode = dataMode();
   const row = db().prepare("SELECT value FROM catalog_meta WHERE key='mode'").get() as { value: string } | undefined;
   if (row?.value === mode) return;
   db().transaction(() => {
+    db().prepare("DELETE FROM messages").run();
+    db().prepare("DELETE FROM proposals").run();
+    db().prepare("DELETE FROM cart_items").run();
+    db().prepare("DELETE FROM carts").run();
+    db().prepare("DELETE FROM attachments").run();
+    db().prepare("DELETE FROM sessions").run();
     db().prepare("DELETE FROM products").run();
     db().prepare("DELETE FROM catalog_meta").run();
     db().prepare("INSERT INTO catalog_meta (key,value) VALUES ('mode',?)").run(mode);
@@ -81,6 +87,7 @@ export async function syncCatalog(maxPages: number, onPage?: (page: number, coun
     for (const item of items) {
       if (seen.has(item.id)) continue;
       seen.add(item.id);
+      if (db().prepare("SELECT 1 FROM products WHERE id=?").get(item.id)) continue;
       const partial: Product = { ...item, supplierArticle: null, description: "", price: null, quantity: null, stores: [], offers: [], properties: {}, certificates: [], conflicts: [], fetchedAt: new Date().toISOString(), source: "live" };
       saveProduct(partial);
     }

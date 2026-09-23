@@ -9,7 +9,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "catalog:sync": "tsx scripts/sync-catalog.ts",
-    "live:check": "tsx scripts/check-live.ts"
+    "live:check": "tsx scripts/check-live.ts",
+    "analogs:discover": "tsx scripts/discover-analogs.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",

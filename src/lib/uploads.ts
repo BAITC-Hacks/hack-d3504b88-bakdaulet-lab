@@ -69,7 +69,8 @@ export async function extractFile(filename: string, buffer: Buffer): Promise<Ext
 
 export function saveAttachment(sessionId: string, filename: string, rows: ExtractedRow[]) {
   const id = randomUUID();
+  const minimalRows = rows.map(({ source, article, quantity, unit, confidence, productId, status }) => ({ source, article, quantity, unit, confidence, productId, status }));
   db().prepare("DELETE FROM attachments WHERE created_at<?").run(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-  db().prepare("INSERT INTO attachments (id,session_id,filename,rows,created_at) VALUES (?,?,?,?,?)").run(id, sessionId, filename.slice(0, 150), JSON.stringify(rows), new Date().toISOString());
+  db().prepare("INSERT INTO attachments (id,session_id,filename,rows,created_at) VALUES (?,?,?,?,?)").run(id, sessionId, filename.toLowerCase().match(/\.[^.]+$/)?.[0] || "file", JSON.stringify(minimalRows), new Date().toISOString());
   return id;
 }
