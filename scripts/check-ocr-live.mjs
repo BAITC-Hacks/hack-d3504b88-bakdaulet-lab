@@ -126,10 +126,21 @@ if (mode === "--browser") {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       assert(overflow <= 2, `Page overflow: ${overflow}`);
       assert.deepEqual(errors, []);
-      results.push({ viewport, correctedRows: 2, excludedRows: 1, cartBefore: 0, cartAfter: 0, overflow });
+      await page.getByRole("button", { name: "Подтвердить добавление" }).click();
+      await page.getByRole("link", { name: "Открыть корзину ↗" }).click();
+      const confirmed = await (await context.request.get(`${base}/api/cart`)).json();
+      assert.deepEqual(
+        confirmed.lines.map(line => [line.productId, line.quantity]).sort((a, b) => a[0] - b[0]),
+        [[1001, 2], [1003, 1]],
+        "Confirmed upload must add exactly the reviewed rows",
+      );
+      await page.reload();
+      await page.getByText("DemoLine 1P 16 А C", { exact: false }).waitFor();
+      assert.deepEqual(errors, []);
+      results.push({ viewport, correctedRows: 2, excludedRows: 1, cartBefore: 0, cartAfter: 0, confirmedLines: 2, overflow });
       await context.close();
     }
     await writeFile(`${reports}/browser-results.json`, JSON.stringify({ at: new Date().toISOString(), httpChecks, results }, null, 2) + "\n");
-    console.log("Upload review passed on desktop/mobile: corrections, replacement, exclusions, preview and unchanged cart.");
+    console.log("Upload review passed on desktop/mobile: corrections, exclusions, unchanged cart before consent, confirmation and refresh.");
   } finally { await browser.close(); }
 }

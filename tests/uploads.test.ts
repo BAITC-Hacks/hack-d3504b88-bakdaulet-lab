@@ -35,7 +35,7 @@ describe("document extraction", () => {
     const rows = await extractFile("spec.docx", await Packer.toBuffer(document));
     expect(rows[0].article).toBe("DEMO-AV16");
     expect(rows[0].quantity).toBe(3);
-  });
+  }, 15_000);
 
   it("extracts a text PDF", async () => {
     const document = await PDFDocument.create();

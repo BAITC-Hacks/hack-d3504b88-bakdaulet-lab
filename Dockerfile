@@ -30,5 +30,6 @@ USER node
 # Check the Linux native binding and runtime loader in the final image.
 RUN node --import tsx -e "const db = new (require('better-sqlite3'))(':memory:'); db.prepare('SELECT 1').get(); db.close(); require.resolve('next/dist/bin/next'); require.resolve('typescript')"
 EXPOSE 3000
-HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=3 CMD ["node", "scripts/docker/healthcheck.mjs"]
+# Live catalog synchronization can take several minutes before HTTP starts.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10m --retries=3 CMD ["node", "scripts/docker/healthcheck.mjs"]
 CMD ["node", "scripts/docker/start.mjs"]

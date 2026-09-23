@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-23T12:04:07.923Z",
+  "at": "2026-09-23T12:20:42.394Z",
   "httpChecks": [
     {
       "name": "empty.xlsx",
@@ -42,6 +42,7 @@
       "excludedRows": 1,
       "cartBefore": 0,
       "cartAfter": 0,
+      "confirmedLines": 2,
       "overflow": 0
     },
     {
@@ -53,6 +54,7 @@
       "excludedRows": 1,
       "cartBefore": 0,
       "cartAfter": 0,
+      "confirmedLines": 2,
       "overflow": 0
     }
   ]
