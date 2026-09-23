@@ -1,3 +1,6 @@
+import * as XLSX from "xlsx";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+
 const base = process.env.APP_BASE_URL || "http://localhost:3000";
 let cookie = "";
 async function call(path, method = "GET", data) {
@@ -21,4 +24,23 @@ const result = await call("/api/cart/confirm", "POST", { id: proposal.id, versio
 const repeat = await call("/api/cart/confirm", "POST", { id: proposal.id, version: proposal.version });
 const after = await call("/api/cart");
 if (result.cartUrl !== "/cart" || after.lines[0]?.quantity !== 2 || !repeat.repeated) throw new Error("Confirmation failed");
-console.log("HTTP smoke passed: search, chat, proposal, confirmation, idempotency, cart. Session cookie:", Boolean(cookie));
+const updated = await call("/api/cart", "PATCH", { key: after.lines[0].key, version: after.version, quantity: 3 });
+if (updated.lines[0]?.quantity !== 3) throw new Error("Cart update failed");
+const workbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["DEMO-AV16", 1, "шт"]]), "Заказ");
+const form = new FormData();
+form.append("file", new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "spec.xlsx");
+const uploadResponse = await fetch(base + "/api/uploads", { method: "POST", headers: { Cookie: cookie, Origin: base }, body: form });
+const upload = await uploadResponse.json();
+if (!uploadResponse.ok || upload.rows?.[0]?.productId !== 1001) throw new Error(`Upload failed: ${upload.error || "wrong match"}`);
+const pdf = await PDFDocument.create();
+const pdfPage = pdf.addPage([400, 200]);
+pdfPage.drawText("DEMO-AV16 1", { x: 30, y: 150, font: await pdf.embedFont(StandardFonts.Helvetica), size: 16 });
+const pdfForm = new FormData();
+pdfForm.append("file", new Blob([await pdf.save()], { type: "application/pdf" }), "spec.pdf");
+const pdfResponse = await fetch(base + "/api/uploads", { method: "POST", headers: { Cookie: cookie, Origin: base }, body: pdfForm });
+const pdfResult = await pdfResponse.json();
+if (!pdfResponse.ok || pdfResult.rows?.[0]?.productId !== 1001) throw new Error(`PDF upload failed: ${pdfResult.error || "wrong match"}`);
+const removed = await call("/api/cart", "DELETE", { key: after.lines[0].key, version: updated.version });
+if (removed.lines.length) throw new Error("Cart removal failed");
+console.log("HTTP smoke passed: search, chat, proposal, confirmation, idempotency, cart edits, XLSX/PDF upload. Session cookie:", Boolean(cookie));

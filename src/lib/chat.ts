@@ -52,6 +52,7 @@ export async function chat(sessionId: string, message: string): Promise<ChatRepl
   const stockText = stock.quantity === null ? "наличие не подтверждено" : `доступно ${stock.quantity} шт.`;
   const conflicts = product.conflicts.length ? ` Есть расхождение характеристик: ${product.conflicts.join("; ")}.` : "";
   return {
+    city: city || null,
     text: `${product.name}. ${stockText} (${stock.label}).${conflicts}${analogs.length ? " Ниже показаны проверенные кандидаты на замену." : stock.quantity === 0 ? " Подтверждённых аналогов в доступной выборке пока нет." : ""}`,
     products: [product], analogs,
   };

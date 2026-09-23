@@ -4,6 +4,9 @@ import { findAnalogs } from "./analogs";
 import { purchasePolicy } from "./policy";
 import { sessionContext, setLastProduct } from "./session";
 import { ChatReply, Product } from "./types";
+import { cartAdapter } from "./cart";
+import { availability } from "./inventory";
+import { db } from "./db";
 
 export async function askAI(sessionId: string, input: string): Promise<ChatReply | null> {
   if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) return null;
@@ -13,11 +16,16 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
     { type: "function", name: "get_product_details", description: "Fetch a current product detail by trusted EKT product ID", strict: true, parameters: { type: "object", properties: { id: { type: "integer" } }, required: ["id"], additionalProperties: false } },
     { type: "function", name: "find_analogs", description: "Find conservatively checked alternatives for an out of stock product", strict: true, parameters: { type: "object", properties: { id: { type: "integer" } }, required: ["id"], additionalProperties: false } },
     { type: "function", name: "get_purchase_policy", description: "Get official payment, shipping or minimum purchase information", strict: true, parameters: { type: "object", properties: { topic: { type: "string" }, city: { type: ["string", "null"] } }, required: ["topic", "city"], additionalProperties: false } },
+    { type: "function", name: "get_cart", description: "Read the current prototype cart", strict: true, parameters: { type: "object", properties: {}, required: [], additionalProperties: false } },
+    { type: "function", name: "prepare_cart_proposal", description: "Prepare an exact product and quantity for separate user confirmation. Does not add to cart", strict: true, parameters: { type: "object", properties: { productId: { type: "integer" }, quantity: { type: "integer" } }, required: ["productId", "quantity"], additionalProperties: false } },
+    { type: "function", name: "read_attachment_rows", description: "Read extracted rows from an attachment in this session", strict: true, parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false } },
   ];
-  const messages: OpenAI.Responses.ResponseInputItem[] = [{ role: "user", content: input }];
+  const context = sessionContext(sessionId);
+  const messages: OpenAI.Responses.ResponseInputItem[] = [{ role: "user", content: `Текущий город: ${context.city || "не задан"}; последний выбранный product ID: ${context.lastProductId || "не выбран"}. Запрос: ${input}` }];
   const products: Product[] = [];
   const analogs: NonNullable<ChatReply["analogs"]> = [];
   const facts: string[] = [];
+  let proposal: ChatReply["proposal"];
   try {
     for (let cycle = 0; cycle < 3; cycle++) {
       const response = await client.responses.create({
@@ -27,7 +35,7 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
       });
       messages.push(...response.output as OpenAI.Responses.ResponseInputItem[]);
       const calls = response.output.filter(item => item.type === "function_call");
-      if (!calls.length) return { text: facts.length ? facts.join("\n") : response.output_text || "Уточните артикул или характеристики товара.", products, analogs };
+      if (!calls.length) return { text: facts.length ? facts.join("\n") : response.output_text || "Уточните артикул или характеристики товара.", products, analogs, proposal, city: context.city };
       for (const call of calls) {
         let output: unknown;
         const args = JSON.parse(call.arguments) as Record<string, unknown>;
@@ -36,7 +44,8 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
         } else if (call.name === "get_product_details" && Number.isSafeInteger(args.id)) {
           const product = await freshProduct(Number(args.id));
           products.push(product); setLastProduct(sessionId, product.id);
-          facts.push(`${product.name}. Артикул: ${product.article}. Цена: ${product.price ?? "не подтверждена"} ₸. Остаток: ${product.quantity ?? "неизвестен"}. Источник: ${product.url || "демонстрационные данные"}.`);
+          const stock = availability(product, context.city || undefined);
+          facts.push(`${product.name}. Артикул: ${product.article}. Цена: ${product.price ?? "не подтверждена"} ₸. Наличие: ${stock.quantity ?? "неизвестно"} (${stock.label}). ${product.conflicts.length ? `Расхождение: ${product.conflicts.join("; ")}.` : ""} Источник: ${product.url || "демонстрационные данные"}.`);
           output = product;
         } else if (call.name === "find_analogs" && Number.isSafeInteger(args.id)) {
           const source = await freshProduct(Number(args.id));
@@ -48,11 +57,21 @@ export async function askAI(sessionId: string, input: string): Promise<ChatReply
           const policy = purchasePolicy(args.topic, typeof args.city === "string" ? args.city : undefined);
           facts.push(`${policy.text} Источник: ${policy.source}.`);
           output = policy;
+        } else if (call.name === "get_cart") {
+          output = cartAdapter.get(sessionId);
+          facts.push("Содержимое текущей корзины показано по данным сервера.");
+        } else if (call.name === "prepare_cart_proposal" && Number.isSafeInteger(args.productId) && Number.isSafeInteger(args.quantity)) {
+          proposal = await cartAdapter.prepare(sessionId, [{ productId: Number(args.productId), quantity: Number(args.quantity) }]);
+          output = proposal;
+          facts.push("Предложение подготовлено; корзина не изменена. Проверьте состав и подтвердите добавление отдельно.");
+        } else if (call.name === "read_attachment_rows" && typeof args.id === "string" && /^[0-9a-f-]{36}$/i.test(args.id)) {
+          const row = db().prepare("SELECT rows FROM attachments WHERE id=? AND session_id=?").get(args.id, sessionId) as { rows: string } | undefined;
+          output = row ? JSON.parse(row.rows) : { error: "Файл не найден в этой сессии" };
         } else output = { error: "Некорректные аргументы" };
         messages.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(output) });
       }
     }
-    return { text: facts.join("\n") || "Уточните запрос.", products, analogs };
+    return { text: facts.join("\n") || "Уточните запрос.", products, analogs, proposal, city: context.city };
   } catch {
     return { text: "AI сейчас недоступен. Поиск по артикулу и корзина продолжают работать." };
   }

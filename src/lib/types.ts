@@ -27,6 +27,7 @@ export type ProposalLine = {
   quantity: number;
   unit: "шт";
   storeId: number | null;
+  city: string | null;
   price: number;
   available: number;
   checkedAt: string;
@@ -34,6 +35,7 @@ export type ProposalLine = {
 export type CartLine = ProposalLine & { key: string };
 export type ChatReply = {
   text: string;
+  city?: string | null;
   products?: Product[];
   analogs?: { product: Product; matches: string[]; differences: string[]; caveats: string[] }[];
   proposal?: { id: string; version: number; lines: ProposalLine[]; expiresAt: string };

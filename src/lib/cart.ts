@@ -11,9 +11,11 @@ export interface CartAdapter {
   get(sessionId: string): { version: number; lines: CartLine[]; total: number };
   prepare(sessionId: string, requests: { productId: number; quantity: number; storeId?: number | null }[]): Promise<{ id: string; version: number; lines: ProposalLine[]; expiresAt: string }>;
   confirm(sessionId: string, id: string, version: number): Promise<{ cart: ReturnType<CartAdapter["get"]>; cartUrl: string; repeated: boolean }>;
+  update(sessionId: string, key: string, quantity: number, version: number): Promise<ReturnType<CartAdapter["get"]>>;
+  remove(sessionId: string, key: string, version: number): ReturnType<CartAdapter["get"]>;
 }
 
-const keyOf = (productId: number, storeId: number | null) => `${productId}:${storeId ?? "all"}`;
+const keyOf = (productId: number, storeId: number | null, city: string | null) => `${productId}:${storeId ?? city?.toLocaleLowerCase("ru") ?? "all"}`;
 const money = (price: number) => Math.round(price * 100);
 
 export class PrototypeCartAdapter implements CartAdapter {
@@ -30,21 +32,23 @@ export class PrototypeCartAdapter implements CartAdapter {
       if (!Number.isSafeInteger(request.productId) || !Number.isSafeInteger(request.quantity) || request.quantity <= 0) throw new CartError("Количество должно быть положительным целым числом.");
       const storeId = request.storeId ?? null;
       if (storeId !== null && !Number.isSafeInteger(storeId)) throw new CartError("Некорректный склад.");
-      const key = keyOf(request.productId, storeId);
+      const key = keyOf(request.productId, storeId, null);
       const existing = grouped.get(key);
       grouped.set(key, { productId: request.productId, storeId, quantity: request.quantity + (existing?.quantity || 0) });
     }
     const cart = this.get(sessionId);
+    const session = db().prepare("SELECT city FROM sessions WHERE id=?").get(sessionId) as { city: string | null };
+    const city = session?.city || null;
     const lines: ProposalLine[] = [];
     for (const request of grouped.values()) {
       const product = await freshProduct(request.productId);
       if (product.offers.length) throw new CartError("У товара есть варианты. Выберите конкретный вариант перед добавлением.");
-      const stock = availability(product, undefined, request.storeId);
-      const already = cart.lines.find(line => line.key === keyOf(product.id, request.storeId))?.quantity || 0;
+      const stock = availability(product, city || undefined, request.storeId);
+      const already = cart.lines.find(line => line.key === keyOf(product.id, request.storeId, city))?.quantity || 0;
       if (stock.quantity === null) throw new CartError("Наличие этого товара для добавления не подтверждено.");
       if (already + request.quantity > stock.quantity) throw new CartError(`Доступно ${stock.quantity} шт., в корзине уже ${already} шт. Уточните количество.`);
       if (product.price === null || product.price <= 0) throw new CartError("Цена товара требует уточнения.");
-      lines.push({ productId: product.id, name: product.name, article: product.article, quantity: request.quantity, unit: "шт", storeId: request.storeId, price: product.price, available: stock.quantity, checkedAt: product.fetchedAt });
+      lines.push({ productId: product.id, name: product.name, article: product.article, quantity: request.quantity, unit: "шт", storeId: request.storeId, city, price: product.price, available: stock.quantity, checkedAt: product.fetchedAt });
     }
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
@@ -66,8 +70,8 @@ export class PrototypeCartAdapter implements CartAdapter {
     if (cartBefore.version !== proposal.cart_version) throw new CartError("Корзина изменилась. Подготовьте предложение заново.", 409);
     for (const line of lines) {
       const product = await freshProduct(line.productId);
-      const stock = availability(product, undefined, line.storeId);
-      const existing = cartBefore.lines.find(item => item.key === keyOf(line.productId, line.storeId))?.quantity || 0;
+      const stock = availability(product, line.city || undefined, line.storeId);
+      const existing = cartBefore.lines.find(item => item.key === keyOf(line.productId, line.storeId, line.city))?.quantity || 0;
       if (product.name !== line.name || product.article !== line.article || product.price !== line.price || stock.quantity === null || stock.quantity < existing + line.quantity) {
         throw new CartError("Цена, товар или наличие изменились. Обновите предложение и подтвердите его снова.", 409);
       }
@@ -80,7 +84,7 @@ export class PrototypeCartAdapter implements CartAdapter {
       if (cart.version !== current.cart_version) throw new CartError("Корзина изменилась. Подготовьте предложение заново.", 409);
       db().prepare("INSERT OR IGNORE INTO carts (session_id,version) VALUES (?,0)").run(sessionId);
       for (const line of lines) {
-        const key = keyOf(line.productId, line.storeId);
+        const key = keyOf(line.productId, line.storeId, line.city);
         const existing = cart.lines.find(item => item.key === key);
         const item: CartLine = { ...line, key, quantity: line.quantity + (existing?.quantity || 0) };
         db().prepare("INSERT INTO cart_items (session_id,item_key,payload) VALUES (?,?,?) ON CONFLICT(session_id,item_key) DO UPDATE SET payload=excluded.payload")
@@ -90,6 +94,34 @@ export class PrototypeCartAdapter implements CartAdapter {
       const result = { cart: this.get(sessionId), cartUrl: "/cart" };
       db().prepare("UPDATE proposals SET status='confirmed',result=? WHERE id=?").run(JSON.stringify(result), id);
       return { ...result, repeated: false };
+    })();
+  }
+
+  async update(sessionId: string, key: string, quantity: number, version: number) {
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new CartError("Количество должно быть положительным целым числом.");
+    const cart = this.get(sessionId);
+    if (cart.version !== version) throw new CartError("Корзина изменилась. Обновите страницу.", 409);
+    const line = cart.lines.find(item => item.key === key);
+    if (!line) throw new CartError("Позиция не найдена в вашей корзине.", 404);
+    const product = await freshProduct(line.productId);
+    const stock = availability(product, line.city || undefined, line.storeId);
+    if (product.price !== line.price || product.name !== line.name || stock.quantity === null) throw new CartError("Данные товара изменились. Подготовьте новое предложение через чат.", 409);
+    if (quantity > stock.quantity) throw new CartError(`Доступно не более ${stock.quantity} шт.`, 409);
+    return db().transaction(() => {
+      if (this.get(sessionId).version !== version) throw new CartError("Корзина изменилась. Обновите страницу.", 409);
+      db().prepare("UPDATE cart_items SET payload=? WHERE session_id=? AND item_key=?").run(JSON.stringify({ ...line, quantity }), sessionId, key);
+      db().prepare("UPDATE carts SET version=version+1 WHERE session_id=?").run(sessionId);
+      return this.get(sessionId);
+    })();
+  }
+
+  remove(sessionId: string, key: string, version: number) {
+    return db().transaction(() => {
+      if (this.get(sessionId).version !== version) throw new CartError("Корзина изменилась. Обновите страницу.", 409);
+      const result = db().prepare("DELETE FROM cart_items WHERE session_id=? AND item_key=?").run(sessionId, key);
+      if (!result.changes) throw new CartError("Позиция не найдена в вашей корзине.", 404);
+      db().prepare("UPDATE carts SET version=version+1 WHERE session_id=?").run(sessionId);
+      return this.get(sessionId);
     })();
   }
 }

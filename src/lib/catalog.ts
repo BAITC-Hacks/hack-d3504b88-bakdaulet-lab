@@ -3,8 +3,19 @@ import { dataMode, getPage, getProduct } from "./ekt";
 import { Product, SearchItem } from "./types";
 
 const searchKey = (value: string) => value.toLocaleLowerCase("ru").normalize("NFKC").replace(/\s+/g, " ").trim();
+function ensureMode() {
+  const mode = dataMode();
+  const row = db().prepare("SELECT value FROM catalog_meta WHERE key='mode'").get() as { value: string } | undefined;
+  if (row?.value === mode) return;
+  db().transaction(() => {
+    db().prepare("DELETE FROM products").run();
+    db().prepare("DELETE FROM catalog_meta").run();
+    db().prepare("INSERT INTO catalog_meta (key,value) VALUES ('mode',?)").run(mode);
+  })();
+}
 
 export function saveProduct(product: Product) {
+  ensureMode();
   const text = [product.article, product.supplierArticle, product.name, product.description, ...Object.values(product.properties).filter(v => typeof v === "string")].join(" ");
   db().prepare(`INSERT INTO products (id,article,supplier_article,name,search_text,payload,fetched_at)
     VALUES (@id,@article,@supplierArticle,@name,@searchText,@payload,@fetchedAt)
@@ -13,6 +24,7 @@ export function saveProduct(product: Product) {
 }
 
 export function catalogStatus() {
+  ensureMode();
   const row = db().prepare("SELECT COUNT(*) count FROM products").get() as { count: number };
   const meta = db().prepare("SELECT key,value FROM catalog_meta").all() as { key: string; value: string }[];
   return { count: row.count, mode: dataMode(), complete: false, ...Object.fromEntries(meta.map(m => [m.key, m.value])) };
@@ -26,6 +38,7 @@ export async function bootstrapCatalog() {
 }
 
 export async function searchProducts(query: string, limit = 8): Promise<SearchItem[]> {
+  ensureMode();
   await bootstrapCatalog();
   const q = searchKey(query).slice(0, 120);
   if (!q) return [];
@@ -54,6 +67,7 @@ export async function freshProduct(id: number) {
 }
 
 export async function syncCatalog(maxPages: number, onPage?: (page: number, count: number) => void) {
+  ensureMode();
   if (dataMode() === "demo") { await bootstrapCatalog(); return catalogStatus(); }
   const detailPages = Math.max(0, Math.min(maxPages, Number(process.env.CATALOG_DETAIL_PAGES || 2)));
   const seen = new Set<number>();

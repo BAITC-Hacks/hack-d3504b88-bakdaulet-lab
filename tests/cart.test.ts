@@ -66,4 +66,28 @@ describe("cart confirmation", () => {
     const id = session();
     await expect(cart.cartAdapter.prepare(id, [{ productId: 1004, quantity: 1 }])).rejects.toThrow(/не подтверждено/);
   });
+
+  it("updates and removes only a session-owned item with current cart version", async () => {
+    const id = session();
+    const proposal = await cart.cartAdapter.prepare(id, [{ productId: 1001, quantity: 2 }]);
+    await cart.cartAdapter.confirm(id, proposal.id, proposal.version);
+    const before = cart.cartAdapter.get(id);
+    const key = before.lines[0].key;
+    await expect(cart.cartAdapter.update(id, key, 11, before.version)).rejects.toThrow(/не более 10/);
+    const changed = await cart.cartAdapter.update(id, key, 4, before.version);
+    expect(changed.lines[0].quantity).toBe(4);
+    await expect(cart.cartAdapter.update(id, key, 5, before.version)).rejects.toThrow(/изменилась/);
+    const after = cart.cartAdapter.remove(id, key, changed.version);
+    expect(after.lines).toHaveLength(0);
+  });
+
+  it("checks availability in the selected city", async () => {
+    const id = session();
+    database.db().prepare("UPDATE sessions SET city=? WHERE id=?").run("Астана", id);
+    await expect(cart.cartAdapter.prepare(id, [{ productId: 1001, quantity: 1 }])).rejects.toThrow(/не подтверждено/);
+    database.db().prepare("UPDATE sessions SET city=? WHERE id=?").run("Алматы", id);
+    const proposal = await cart.cartAdapter.prepare(id, [{ productId: 1001, quantity: 1 }]);
+    expect(proposal.lines[0].city).toBe("Алматы");
+    expect((await cart.cartAdapter.confirm(id, proposal.id, proposal.version)).cart.lines[0].quantity).toBe(1);
+  });
 });

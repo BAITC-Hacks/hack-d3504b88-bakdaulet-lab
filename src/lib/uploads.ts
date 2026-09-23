@@ -26,12 +26,12 @@ async function vision(buffer: Buffer, mime: string, filename: string) {
 export async function extractFile(filename: string, buffer: Buffer): Promise<ExtractedRow[]> {
   const extension = filename.toLocaleLowerCase().match(/\.[^.]+$/)?.[0];
   if (!extension || ![".xlsx", ".xls", ".docx", ".pdf", ".jpg", ".jpeg"].includes(extension)) throw new Error("Поддерживаются XLSX, XLS, DOCX, PDF и JPEG. Старый DOC пока не поддерживается; сохраните его как DOCX или PDF.");
+  if (buffer.length === 0) throw new Error("Файл пустой.");
   const zip = buffer.subarray(0, 2).toString() === "PK";
   const pdf = buffer.subarray(0, 4).toString() === "%PDF";
   const jpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
   const xls = buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
   if (([".xlsx", ".docx"].includes(extension) && !zip) || (extension === ".xls" && !xls) || (extension === ".pdf" && !pdf) || ([".jpg", ".jpeg"].includes(extension) && !jpeg)) throw new Error("Содержимое файла не соответствует расширению.");
-  if (buffer.length === 0) throw new Error("Файл пустой.");
   let rows: ExtractedRow[] = [];
   if (extension === ".xlsx" || extension === ".xls") {
     const XLSX = await import("xlsx");
@@ -45,8 +45,13 @@ export async function extractFile(filename: string, buffer: Buffer): Promise<Ext
     const result = await mammoth.extractRawText({ buffer });
     rows = linesToRows(result.value, "Строка");
   } else if (extension === ".pdf") {
-    const pdfParse = (await import("pdf-parse")).default;
-    const result = await pdfParse(buffer, { max: 10 });
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    let result;
+    try { result = await parser.getText({ first: 10 }); }
+    catch (error) { throw new Error(error instanceof Error && /password/i.test(error.message) ? "PDF защищён паролем. Загрузите файл без пароля." : "PDF повреждён или не читается."); }
+    finally { await parser.destroy(); }
+    if (result.total > 10) throw new Error("PDF содержит более 10 страниц. Загрузите первые 10 страниц отдельным файлом.");
     rows = linesToRows(result.text, "Страница/строка");
     if (!rows.length) rows = linesToRows(await vision(buffer, "application/pdf", filename), "OCR");
   } else rows = linesToRows(await vision(buffer, "image/jpeg", filename), "Фото");

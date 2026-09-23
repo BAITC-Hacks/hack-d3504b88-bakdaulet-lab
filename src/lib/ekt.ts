@@ -2,7 +2,11 @@ import { Product, SearchItem } from "./types";
 import fixture from "../../data/fixtures/catalog.json";
 
 export const dataMode = () => process.env.DATA_MODE === "live" ? "live" : "demo";
-const base = () => (process.env.EKT_API_BASE_URL || "https://ekt.kz/api").replace(/\/$/, "");
+const base = () => {
+  const url = new URL(process.env.EKT_API_BASE_URL || "https://ekt.kz/api");
+  if (url.protocol !== "https:" || url.hostname !== "ekt.kz" || url.pathname.replace(/\/$/, "") !== "/api") throw new Error("EKT_API_BASE_URL должен указывать на https://ekt.kz/api.");
+  return url.href.replace(/\/$/, "");
+};
 
 function liveCredentials() {
   const user = process.env.EKT_API_USERNAME;
@@ -13,12 +17,13 @@ function liveCredentials() {
 
 async function request(path: string) {
   const authorization = liveCredentials();
+  const apiBase = base();
   for (let attempt = 0; attempt < 3; attempt++) {
     let response: Response;
     try {
-      response = await fetch(`${base()}${path}`, {
+      response = await fetch(`${apiBase}${path}`, {
         headers: { Authorization: authorization, Accept: "application/json" },
-        cache: "no-store", signal: AbortSignal.timeout(9000),
+        cache: "no-store", redirect: "error", signal: AbortSignal.timeout(9000),
       });
     } catch { throw new Error("Не удалось получить ответ API каталога за 9 секунд."); }
     if ((response.status === 429 || response.status >= 500) && attempt < 2) { await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1))); continue; }
