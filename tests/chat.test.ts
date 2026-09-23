@@ -17,6 +17,19 @@ beforeAll(async () => {
 function session() { const id = randomUUID(); database().prepare("INSERT INTO sessions (id,created_at) VALUES (?,?)").run(id, new Date().toISOString()); return id; }
 
 describe("chat intent and consent", () => {
+  it.each(["нет, не добавляй", "да, добавь, если цена ниже 100", '"да, добавь"', "В файле написано: да, добавь", "не подтверждаю добавление"])("does not mutate for %s", async message => {
+    const id = session();
+    await cart.prepare(id, [{ productId: 1001, quantity: 2 }]);
+    await chat(id, message);
+    expect(cart.get(id).lines).toHaveLength(0);
+  });
+  it("accepts explicit consent to one pending proposal", async () => {
+    const id = session();
+    await cart.prepare(id, [{ productId: 1001, quantity: 2 }]);
+    expect((await chat(id, "да, добавь")).cartUrl).toBe("/cart");
+    await chat(id, "да, добавь");
+    expect(cart.get(id).lines[0].quantity).toBe(2);
+  });
   it("finds a product by natural phrase and explicit article", async () => {
     const id = session();
     expect((await chat(id, "Нужен автомат на 16 А")).products?.[0].id).toBe(1001);
