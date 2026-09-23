@@ -294,3 +294,212 @@ HTTP- и браузерные скрипты по умолчанию обращ�
 ## Развёрнутая версия
 
 Ссылка на публично развёрнутое приложение **в репозитории не указана**. Решение можно проверить локально по инструкции выше: [http://localhost:3000](http://localhost:3000).
+
+## Как задеплоить проект: пошагово
+
+Ниже — вариант для **одного Linux-сервера (VPS), Docker и собственного домена**. Приложение работает в контейнере, SQLite сохраняется в отдельном томе, а Caddy принимает запросы по HTTPS. Caddy добавляется этой инструкцией как внешний прокси.
+
+**Коротко:** подготовить сервер → скопировать проект → заполнить `.env` → указать домен → запустить Docker Compose.
+
+Это инструкция для развёртывания, а не отчёт об уже работающем сайте: полный запуск Docker и HTTPS на публичном сервере пока не проверен.
+
+### Шаг 1. Подготовить сервер и домен
+
+Понадобятся:
+
+- VPS с Ubuntu 24.04, постоянным диском и доступом по SSH с `sudo`.
+- Docker Engine и плагин Docker Compose. Если их ещё нет, установите по [официальной инструкции для Ubuntu](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository).
+- Домен или поддомен, например `ekt.example.com`. Это **пример**: в командах и конфигурации ниже замените его своим адресом.
+
+В панели DNS создайте запись **A** для выбранного домена со значением публичного IP сервера. Если есть запись AAAA, она тоже должна указывать на этот сервер. Разрешите входящие TCP-порты **80 и 443** в панели провайдера и firewall сервера; сохраните доступ по SSH. Порт приложения `3000` наружу публиковать не требуется.
+
+Подключитесь к серверу, заменив `ubuntu` и `SERVER_IP` своими данными:
+
+```bash
+ssh ubuntu@SERVER_IP
+```
+
+Дальнейшие команды выполняйте **на сервере в Bash**:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git curl nano
+sudo systemctl enable --now docker
+sudo docker version
+sudo docker compose version
+```
+
+Node.js и npm на сервер отдельно устанавливать не нужно: они находятся в образе приложения.
+
+### Шаг 2. Скачать проект и настроить `.env`
+
+```bash
+mkdir -p ~/ekt-deploy
+cd ~/ekt-deploy
+git clone https://github.com/BAITC-Hacks/hack-d3504b88-bakdaulet-lab.git app
+cd app
+test -f .env || cp .env.example .env
+chmod 600 .env
+nano .env
+```
+
+Для первого запуска оставьте **`DATA_MODE=demo`** и **`CART_MODE=prototype`**. Так можно проверить сайт без ключей EKT и OpenAI.
+
+Для реального каталога сразу задайте **`DATA_MODE=live`** и заполните `EKT_API_USERNAME` / `EKT_API_PASSWORD`. Для AI и распознавания фото/сканов также нужны `OPENAI_API_KEY` и `OPENAI_MODEL`; значение модели должно быть доступно вашему API-аккаунту. В отчётах проекта проверено `gpt-6-sol`.
+
+В `nano`: **Ctrl+O → Enter** сохраняет файл, **Ctrl+X** закрывает редактор. Секреты остаются только в серверном `.env`. Не добавляйте их в Git. Путь SQLite в контейнере задаст конфигурация следующего шага.
+
+### Шаг 3. Создать конфигурацию контейнеров
+
+Вернитесь в папку развёртывания и создайте `compose.yaml`:
+
+```bash
+cd ~/ekt-deploy
+nano compose.yaml
+```
+
+Вставьте целиком:
+
+```yaml
+name: ekt-public
+
+services:
+  app:
+    build: ./app
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - ./app/.env
+    environment:
+      DATABASE_PATH: /app/storage/app.sqlite
+      PORT: "3000"
+    volumes:
+      - ekt_data:/app/storage
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  ekt_data:
+  caddy_data:
+  caddy_config:
+```
+
+Этот файл расположен **рядом с папкой `app`**, отдельно от Git-репозитория. Все дальнейшие команды `docker compose` запускайте из `~/ekt-deploy`: они используют именно эту конфигурацию. Имя `ekt-public` сохраняйте при обновлениях — от него зависит имя тома с БД. Политика `restart` запускает контейнеры после перезапуска Docker, если вы не остановили их вручную. См. [развёртывание Compose на одном сервере](https://docs.docker.com/compose/how-tos/production/).
+
+### Шаг 4. Подключить домен и HTTPS
+
+```bash
+nano ~/ekt-deploy/Caddyfile
+```
+
+Вставьте конфигурацию, заменив **оба** вхождения `ekt.example.com` своим доменом:
+
+```caddyfile
+ekt.example.com {
+    @bad_origin {
+        not method GET HEAD OPTIONS
+        not header Origin https://ekt.example.com
+    }
+    respond @bad_origin "Forbidden origin" 403
+
+    reverse_proxy app:3000 {
+        header_up X-Forwarded-Proto https
+        header_up Origin https://0.0.0.0:3000
+    }
+}
+```
+
+При правильно настроенном DNS и доступных портах 80/443 Caddy получает и продлевает HTTPS-сертификат автоматически. Сертификаты сохраняются в его отдельном томе. Основание: [автоматический HTTPS](https://caddyserver.com/docs/automatic-https) и [образ Caddy](https://hub.docker.com/_/caddy).
+
+**Зачем здесь проверка Origin:** текущий Docker-запуск Next.js использует внутренний адрес `0.0.0.0:3000`, с которым приложение сравнивает источник запроса. Поэтому прокси сначала допускает изменяющие запросы только с вашего HTTPS-домена, затем подставляет внутренний Origin. Сохраняйте обе части конфигурации вместе и не публикуйте порт `app` наружу. Адрес `https://0.0.0.0:3000` в `header_up` менять на домен не нужно. Использованы стандартные [правила сопоставления запросов](https://caddyserver.com/docs/caddyfile/matchers) и [настройки reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
+
+### Шаг 5. Собрать и запустить
+
+```bash
+cd ~/ekt-deploy
+sudo docker compose config --quiet
+sudo docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo docker compose up -d --build
+sudo docker compose ps
+sudo docker compose logs --tail=100 app caddy
+```
+
+Первая сборка скачивает зависимости. Затем приложение синхронизирует каталог и запускает HTTP-сервер; в live это может занять несколько минут. До завершения синхронизации прокси может отвечать `502`. Посмотреть запуск в реальном времени: `sudo docker compose logs -f app`. **Ctrl+C** закрывает просмотр логов, контейнеры продолжают работать.
+
+Откройте **`https://ekt.example.com`**, заменив домен своим. Проверьте готовность:
+
+```bash
+curl -fsS https://ekt.example.com/api/health
+```
+
+Ожидается `ready: true`, выбранный режим и непустой каталог. В demo — четыре товара. Одного ответа health недостаточно: в браузере выполните сценарий **`DEMO-AV16-OLD` → аналог → предложение → подтверждение → корзина**, затем обновите страницу. В live используйте актуальную пару из каталога.
+
+Проверьте также защиту изменяющих запросов: следующий запрос с чужим Origin должен вернуть **403**:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -X POST https://ekt.example.com/api/chat \
+  -H 'Origin: https://other.example.com' \
+  -H 'Content-Type: application/json' \
+  --data '{"message":"DEMO-AV16"}'
+```
+
+Для проверки сохранения данных создайте позицию в корзине, выполните `sudo docker compose restart app`, дождитесь готовности и обновите корзину **в той же сессии браузера**. Только после этих проверок добавляйте реальный адрес сайта в раздел «Развёрнутая версия» выше.
+
+### Шаг 6. Обновлять проект и сохранять данные
+
+**Перед обновлением — резервная копия БД.** Остановка приложения на время копирования сохраняет согласованность SQLite и её служебных файлов:
+
+```bash
+cd ~/ekt-deploy
+backup_dir="./backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$backup_dir"
+chmod 700 ./backups "$backup_dir"
+sudo docker compose stop app
+sudo docker compose cp app:/app/storage/. "$backup_dir/"
+sudo docker compose start app
+```
+
+Сохраните эту папку и серверный `.env` также вне VPS. Они содержат данные приложения и секреты; в Git их не добавляйте. Если копирование завершилось ошибкой, возобновите приложение командой `sudo docker compose start app` и разберитесь с ошибкой до обновления.
+
+**Обновление кода:**
+
+```bash
+cd ~/ekt-deploy/app
+git pull --ff-only origin main
+cd ~/ekt-deploy
+sudo docker compose up -d --build
+sudo docker compose ps
+curl -fsS https://ekt.example.com/api/health
+```
+
+После изменения ключей в `app/.env` пересоздайте контейнер: `sudo docker compose up -d --force-recreate app`. После изменения Caddyfile: `sudo docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
+
+**Остановка сайта:** `sudo docker compose down`. Тома останутся. **Не добавляйте `-v`**: этот флаг удалит тома, включая корзины и сессии. Данные приложения находятся в томе `ekt-public_ekt_data`, а не в папке Git-репозитория.
+
+**При переходе с demo на live:** остановите прежний проект командой `sudo docker compose down`, измените `DATA_MODE` и ключи в `.env`, а `name` в `compose.yaml` — например, на `ekt-public-live`. Затем запустите `sudo docker compose up -d --build`. Новый проект получит отдельную БД; старый том останется сохранённым. Смена режима в прежнем томе очистила бы корзины и сессии.
+
+### Если что-то не работает
+
+| Симптом | Что проверить |
+| --- | --- |
+| Сайт недоступен или сертификат не выпущен | DNS A/AAAA, доступность портов 80/443, отсутствие другого сервера на этих портах; `sudo docker compose logs --tail=100 caddy`. |
+| `502` или приложение перезапускается | `sudo docker compose logs --tail=100 app`: дождитесь синхронизации либо исправьте ошибку доступа к EKT. |
+| `403` при отправке сообщения или подтверждении | Открывайте именно HTTPS-домен из Caddyfile; проверьте оба вхождения домена, блок `@bad_origin` и `header_up`. |
+| Каталог не готов в live | Учётные данные EKT и доступ сервера к API; `/api/health` должен показывать `ready: true`. |
+| Фото или скан не распознаётся | Ключ и доступность `OPENAI_MODEL`, ответ сервиса и лимиты загружаемого файла. |
+| Исчезла прежняя корзина | Та же ли cookie-сессия, имя Compose-проекта и том; не менялся ли `DATA_MODE` в той же БД. |
+
+В этом варианте работает **один экземпляр приложения с постоянным томом SQLite**. Публичную доступность сайта, HTTPS, подтверждение корзины и сохранность после рестарта нужно проверить на вашем сервере; успешный локальный build сам по себе этого не подтверждает.
