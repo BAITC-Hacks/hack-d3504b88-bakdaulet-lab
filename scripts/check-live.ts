@@ -2,6 +2,7 @@ import { loadEnvConfig } from "@next/env";
 import OpenAI from "openai";
 import { dataMode, getPage, getProduct } from "../src/lib/ekt";
 
+async function main() {
 loadEnvConfig(process.cwd());
 if (dataMode() !== "live") throw new Error("Для этой проверки задайте DATA_MODE=live в локальном .env.");
 if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL) throw new Error("Укажите OPENAI_API_KEY и OPENAI_MODEL в локальном .env.");
@@ -25,3 +26,9 @@ input.push(...first.output as OpenAI.Responses.ResponseInputItem[], { type: "fun
 const second = await client.responses.create({ model: process.env.OPENAI_MODEL, input, tools, tool_choice: "none", max_output_tokens: 100, store: false });
 if (!second.output_text) throw new Error("После результата инструмента модель не вернула ответ.");
 console.log(`OpenAI Responses: инструмент get_product_details вызван и результат принят за ${Date.now() - started} мс. Модель: ${process.env.OPENAI_MODEL}.`);
+}
+
+main().catch(error => {
+  console.error(error instanceof Error ? error.message : "Неизвестная ошибка live-проверки.");
+  process.exitCode = 1;
+});

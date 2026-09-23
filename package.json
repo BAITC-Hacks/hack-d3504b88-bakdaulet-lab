@@ -11,7 +11,9 @@
     "test": "vitest run",
     "catalog:sync": "tsx scripts/sync-catalog.ts",
     "live:check": "tsx scripts/check-live.ts",
-    "analogs:discover": "tsx scripts/discover-analogs.ts"
+    "analogs:discover": "tsx scripts/discover-analogs.ts",
+    "smoke:live": "node scripts/smoke-live-http.mjs",
+    "browser:live": "node scripts/check-live-browser.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",

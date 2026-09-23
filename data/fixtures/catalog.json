@@ -13,7 +13,7 @@
       "image": null,
       "url": "",
       "offers": [],
-      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST": "6 кА" }
     },
     {
       "id": 1002,
@@ -26,7 +26,7 @@
       "image": null,
       "url": "",
       "offers": [],
-      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "16 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST": "6 кА" }
     },
     {
       "id": 1003,
@@ -39,7 +39,7 @@
       "image": null,
       "url": "",
       "offers": [],
-      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "25 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В" }
+      "properties": { "TIP": "Автоматический выключатель", "KOLICHESTVO_POLYUSOV": "1", "NOMINALNYY_TOK": "25 А", "KHARAKTERISTIKA": "C", "NOMINALNOE_NAPRYAZHENIE": "230 В", "NOMINALNAYA_OTKLYUCHAYUSHCHAYA_SPOSOBNOST": "6 кА" }
     },
     {
       "id": 1004,

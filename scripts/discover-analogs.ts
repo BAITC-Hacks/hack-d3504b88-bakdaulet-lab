@@ -5,6 +5,7 @@ import { freshProduct, catalogStatus } from "../src/lib/catalog";
 import { availability } from "../src/lib/inventory";
 import { findAnalogs } from "../src/lib/analogs";
 
+async function main() {
 loadEnvConfig(process.cwd());
 if (dataMode() !== "live") throw new Error("Для поиска реальной пары задайте DATA_MODE=live и синхронизируйте каталог.");
 const status = catalogStatus();
@@ -28,3 +29,9 @@ for (const row of rows) {
   await new Promise(resolve => setTimeout(resolve, 100));
 }
 console.log(`Проверено ${examined} карточек из частичного индекса (${status.count}); без остатка ${outOfStock}. Подтверждённая пара не найдена. Увеличьте индекс/лимит или уточните параметры.`);
+}
+
+main().catch(error => {
+  console.error(error instanceof Error ? error.message : "Неизвестная ошибка поиска аналогов.");
+  process.exitCode = 1;
+});
