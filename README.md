@@ -49,6 +49,7 @@ Next.js 16, React 19, TypeScript, SQLite. Route Handlers работают в Nod
 
 ```powershell
 npm run typecheck
+npm run lint
 npm run test
 npm run build
 npm run live:check # только при настроенном live .env

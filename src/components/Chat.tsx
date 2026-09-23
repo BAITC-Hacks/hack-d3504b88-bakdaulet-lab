@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { ChatReply, Product, ProposalLine } from "@/lib/types";
 import UploadReview, { type UploadRow } from "./UploadReview";
 import { availability } from "@/lib/inventory";
@@ -20,7 +21,7 @@ function ProductCard({ product, city, onPrepare }: { product: Product; city?: st
   const [quantity, setQuantity] = useState(1);
   const stock = availability(product, city || undefined);
   const price = product.price !== null && product.price > 0 ? formatMoney(product.price) : "Цена требует уточнения";
-  return <article className="product-card"><div className="product-main"><div className="product-image">{product.image ? <img src={product.image} alt="" /> : <span>ЕКТ</span>}</div><div><p className="card-kicker">АРТИКУЛ {product.article || "не указан"}</p><h3>{product.name}</h3><p className="muted">{product.supplierArticle ? `Артикул поставщика: ${product.supplierArticle}` : ""}</p><p className="product-price">{price}</p></div></div>
+  return <article className="product-card"><div className="product-main"><div className="product-image">{product.image ? <Image src={product.image} alt="" width={80} height={80} unoptimized /> : <span>ЕКТ</span>}</div><div><p className="card-kicker">АРТИКУЛ {product.article || "не указан"}</p><h3>{product.name}</h3><p className="muted">{product.supplierArticle ? `Артикул поставщика: ${product.supplierArticle}` : ""}</p><p className="product-price">{price}</p></div></div>
     <div className="stock-row"><span className={stock.quantity && stock.quantity > 0 ? "stock-chip" : "stock-chip muted-chip"}>{stock.quantity === null ? stock.label : stock.quantity > 0 ? `${stock.label}: ${stock.quantity} шт.` : `Нет в наличии (${stock.label})`}</span><span className="muted">Проверено {new Date(product.fetchedAt).toLocaleString("ru-RU")}</span></div>
     {product.conflicts.map(item => <p className="warning" key={item}>⚠ {item}. Для замены нужна проверка.</p>)}
     <details className="details"><summary>Характеристики и склады</summary><div className="property-list">{Object.entries(product.properties).slice(0, 18).map(([key, value]) => <div key={key}><span>{key}</span><strong>{Array.isArray(value) ? value.join(", ") : String(value ?? "неизвестно")}</strong></div>)}</div>{product.stores.map(store => <p key={store.id} className="store-line">{store.name}: {store.quantity ?? "неизвестно"}</p>)}</details>
